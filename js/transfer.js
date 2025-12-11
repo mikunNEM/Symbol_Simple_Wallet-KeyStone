@@ -27,7 +27,7 @@ export async function sendTx() {
   const recipientAddress = new appState.sdkSymbol.Address(recipientRaw);
   const amount = Number(amountStr);
 
-  if (Number.isNaN(amount) || amount <= 0) {
+  if (Number.isNaN(amount) || amount < 0) {
     setStatus("tx-status", "金額が不正です。", "error");
     return;
   }
