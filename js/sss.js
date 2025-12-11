@@ -23,7 +23,7 @@ let isConnectedOnce = false;        // ← 1回だけ実行
 let lockedNetworkType = null;       // ← 途中で Testnet に変わらないようロック
 
 /* ------------------------------------------------------
-  内部接続処理（自動 / 手動どちらも利用）
+  内部接続処理（SSS専用：自動 / 手動）
 ------------------------------------------------------ */
 async function internalConnect(isAuto) {
 
@@ -48,7 +48,7 @@ async function internalConnect(isAuto) {
       return;
     }
 
-    // --- ネットワークタイプをロックする（以降は変更しない） ---
+    // --- ネットワークタイプをロックする ---
     if (!lockedNetworkType) lockedNetworkType = detectedNetworkType;
     const networkType = lockedNetworkType;
 
@@ -72,7 +72,7 @@ async function internalConnect(isAuto) {
     await initSdk();
 
     /* ------------------------------------------------------
-      3. アカウント生成
+      3. 公開アカウント生成
     ------------------------------------------------------ */
     const pub = new appState.sdkCore.PublicKey(pubKey);
     const publicAccount = appState.facade.createPublicAccount(pub);
@@ -82,7 +82,7 @@ async function internalConnect(isAuto) {
     setStatus("sss-status", "SSS と接続済み", "success");
 
     /* ------------------------------------------------------
-      4. UI ボタンの有効化（存在する要素のみ）
+      4. UI ボタンの有効化
     ------------------------------------------------------ */
     ["btn-transfer", "btn-update-meta"].forEach((id) => {
       const el = document.getElementById(id);
@@ -107,11 +107,57 @@ async function internalConnect(isAuto) {
 }
 
 /* ------------------------------------------------------
-  手動接続ボタン用
+  Keystone 接続処理（新規追加）
 ------------------------------------------------------ */
-/*export async function connectSSS() {
-  await internalConnect(false);
-}*/
+export async function initKeystone() {
+
+  // Keystone の情報
+  const acc = window.catapult?.activeAccount;
+  if (!acc) {
+    console.warn("Keystone activeAccount が取得できません");
+    return;
+  }
+
+  // ---------------------------
+  // 0. appState に情報をセット
+  // ---------------------------
+  appState.currentPubKey = acc.publicKey;
+  appState.networkType = acc.networkType;
+  appState.currentAddress = acc.address;
+
+  setText("network-label", networkLabel(acc.networkType));
+  setText("account-address", acc.address);
+
+  // ---------------------------
+  // 1. NodeWatch でノード選択
+  // ---------------------------
+  const isTestnet = acc.networkType === NetworkType.TESTNET;
+  appState.NODE = await selectNode(isTestnet);
+
+  console.log("Keystone  Selected NODE:", appState.NODE);
+
+  // ---------------------------
+  // 2. SDK 初期化
+  // ---------------------------
+  await initSdk();
+
+  // ---------------------------
+  // 3. アカウント情報 / TX 読み込み
+  // ---------------------------
+  await refreshAccount();
+  await loadRecentTx();
+
+  // UI 表示（SSS と同じスタイル）
+  setStatus("sss-status", "Keystone と接続済み", "success");
+
+  // UI ボタン有効化
+  ["btn-transfer", "btn-update-meta"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+
+  console.log("Keystone connect complete:", appState);
+}
 
 /* ------------------------------------------------------
   自動接続（activePublicKey があれば即接続）

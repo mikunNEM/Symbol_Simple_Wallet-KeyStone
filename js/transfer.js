@@ -1,5 +1,5 @@
 // transfer.js
-// XYM 送金トランザクション（SSS 署名）
+// XYM 送金トランザクション（SSS + Keystone 署名対応）
 
 import { appState, getXymMosaicIdHex } from "./config.js";
 import { setStatus } from "./ui.js";
@@ -64,6 +64,45 @@ export async function sendTx() {
   const txPayloadHex = appState.sdkCore.utils.uint8ToHex(tx.serialize());
 
   try {
+    /* ======================================================
+       ★ Keystone 署名（最初にチェック）
+    ====================================================== */
+    if (window.catapult?.requestSignTransaction) {
+      setStatus("tx-status", "Keystone で署名待ち…");
+
+      // Keystone 署名実行（payload を渡すだけ）
+      const signed = await window.catapult.requestSignTransaction(txPayloadHex);
+
+      // Keystone は signed.signedPayload / signedPayload / payload のいずれか
+      const signedPayload =
+        signed?.signedPayload || signed?.payload || signed;
+
+      const jsonPayload = JSON.stringify({ payload: signedPayload });
+
+      const res = await fetch(new URL("/transactions", appState.NODE), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: jsonPayload,
+      });
+
+      if (res.ok) {
+        setStatus(
+          "tx-status",
+          `送金をアナウンスしました。（Keystone）`,
+          "success"
+        );
+      } else {
+        console.error(await res.text());
+        setStatus("tx-status", "アナウンスに失敗しました。（Keystone）", "error");
+      }
+
+      return; // ← SSS を通さない
+    }
+
+    /* ======================================================
+       ★ 元の SSS コード（削除していません）
+    ====================================================== */
+
     setStatus("tx-status", "SSSで署名待ち…");
 
     window.SSS.setTransactionByPayload(txPayloadHex);
@@ -87,6 +126,7 @@ export async function sendTx() {
       console.error(await res.text());
       setStatus("tx-status", "アナウンスに失敗しました。", "error");
     }
+
   } catch (e) {
     console.error(e);
     setStatus("tx-status", "署名または送信に失敗しました。", "error");
